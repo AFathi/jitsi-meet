@@ -2,7 +2,7 @@
 
 import React, { Component } from 'react';
 
-import { BackHandler, StatusBar, View } from 'react-native';
+import { BackHandler, SafeAreaView, StatusBar, View } from 'react-native';
 import { connect as reactReduxConnect } from 'react-redux';
 
 import { appNavigate } from '../../../app';
@@ -10,6 +10,7 @@ import { connect, disconnect } from '../../../base/connection';
 import { getParticipantCount } from '../../../base/participants';
 import { Container, LoadingIndicator, TintedView } from '../../../base/react';
 import {
+    isNarrowAspectRatio,
     makeAspectRatioAware
 } from '../../../base/responsive-ui';
 import { TestConnectionInfo } from '../../../base/testing';
@@ -17,12 +18,18 @@ import { createDesiredLocalTracks } from '../../../base/tracks';
 import { ConferenceNotification } from '../../../calendar-sync';
 import { Chat } from '../../../chat';
 import {
+    FILMSTRIP_SIZE,
     Filmstrip,
     isFilmstripVisible,
     TileView
 } from '../../../filmstrip';
 import { LargeVideo } from '../../../large-video';
 import { AddPeopleDialog, CalleeInfoContainer } from '../../../invite';
+import {
+    areNotificationsVisible,
+    NotificationsContainer,
+    showNotification
+} from '../../../notifications';
 import { Captions } from '../../../subtitles';
 import { setToolboxVisible, Toolbox } from '../../../toolbox';
 import { shouldDisplayTileView } from '../../../video-layout';
@@ -60,6 +67,11 @@ type Props = {
      * @private
      */
     _locationURL: URL,
+
+    /**
+     * True if the notifications should be visible.
+     */
+    _notificationsVisible: boolean,
 
     /**
      * The handler which dispatches the (redux) action connect.
@@ -243,6 +255,7 @@ class Conference extends Component<Props> {
     render() {
         const {
             _connecting,
+            _notificationsVisible,
             _reducedUI,
             _shouldDisplayTileView
         } = this.props;
@@ -308,7 +321,13 @@ class Conference extends Component<Props> {
                     }
                 </View>
 
-                <NavigationBar />
+                <SafeAreaView
+                    pointerEvents = 'box-none'
+                    style = { styles.navBarSafeView }>
+                    <NavigationBar />
+                    { _notificationsVisible
+                        && this._renderNotificationsContainer() }
+                </SafeAreaView>
 
                 <TestConnectionInfo />
 
@@ -352,6 +371,33 @@ class Conference extends Component<Props> {
             !this.props._reducedUI && ConferenceNotification
                 ? <ConferenceNotification />
                 : undefined);
+    }
+
+    /**
+     * Renders a container for notifications to be displayed by the
+     * base/notifications feature.
+     *
+     * @private
+     * @returns {React$Element}
+     */
+    _renderNotificationsContainer() {
+        const notificationsStyle = {};
+
+        // In the landscape mode (wide) there's problem with notifications being
+        // shadowed by the filmstrip rendered on the right. This makes the "x"
+        // button not clickable. In order to avoid that a margin of the
+        // filmstrip's size is added to the right.
+        //
+        // Pawel: after many attempts I failed to make notifications adjust to
+        // their contents width because of column and rows being used in the
+        // flex layout. The only option that seemed to limit the notification's
+        // size was explicit 'width' value which is not better than the margin
+        // added here.
+        if (this.props._filmstripVisible && !isNarrowAspectRatio(this)) {
+            notificationsStyle.marginRight = FILMSTRIP_SIZE;
+        }
+
+        return <NotificationsContainer style = { notificationsStyle } />;
     }
 }
 
@@ -485,6 +531,14 @@ function _mapStateToProps(state) {
         _locationURL: locationURL,
 
         /**
+         * Set to {@code true} when the notifications are to be displayed.
+         *
+         * @private
+         * @type {boolean}
+         */
+        _notificationsVisible: areNotificationsVisible(state),
+
+        /**
          * The number of participants in the conference.
          *
          * @private
@@ -536,5 +590,5 @@ function _mapStateToProps(state) {
 }
 
 // $FlowFixMe
-export default reactReduxConnect(_mapStateToProps, _mapDispatchToProps)(
-    makeAspectRatioAware(Conference));
+export default reactReduxConnect(
+    _mapStateToProps, _mapDispatchToProps)(makeAspectRatioAware(Conference));
